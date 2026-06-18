@@ -1,0 +1,40 @@
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+
+from fetch_data import create_directory_structure, fetch_fx_data, fetch_speech_corpus
+from fred_controls import fetch_and_save_fred_shocks
+from sentiment_pipeline import run_sentiment_analysis
+from align_and_merge import align_and_merge_datasets
+from causality_analysis import execute_statistical_tests
+from backtest_engine import run_out_of_sample_backtest
+
+
+def run_pipeline():
+    print("=================================================================")
+    print("     LAUNCHING FX QUANT LANGUAGE MODEL PIPELINE PHASE 2.0        ")
+    print("=================================================================\n")
+
+    create_directory_structure()
+    fetch_fx_data(ticker="EURUSD=X", period="2y", interval="1h")
+    fetch_speech_corpus()
+
+    print("\n--- Phase 1.5: Executing FRED Macro Engine Realignment ---")
+    fetch_and_save_fred_shocks()
+
+    print("\n--- Phase 2: Processing Filtered Text through FinBERT Pipeline ---")
+    run_sentiment_analysis(batch_size=16)
+
+    print("\n--- Phase 3: Merging Continuous Time-Series Horizons ---")
+    align_and_merge_datasets()
+
+    print("\n--- Phase 4: Executing Multi-Lag Distributed Econometric Testing ---")
+    execute_statistical_tests()
+
+    print("\n--- Phase 5: Executing Forward Walk Out-of-Sample Backtest ---")
+    run_out_of_sample_backtest(train_window_pct=0.70)
+
+
+if __name__ == "__main__":
+    run_pipeline()
