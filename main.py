@@ -1,7 +1,21 @@
 import os
 import sys
+import random
+import numpy as np
+import torch
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+
+
+def enforce_strict_reproducibility(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+enforce_strict_reproducibility()
 
 from fetch_data import create_directory_structure, fetch_fx_data, fetch_speech_corpus
 from fred_controls import fetch_and_save_fred_shocks

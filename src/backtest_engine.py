@@ -1,12 +1,25 @@
 import os
+import random
 import numpy as np
 import pandas as pd
+import torch
 import statsmodels.api as sm
 from sklearn.metrics import r2_score
 from sklearn.linear_model import RidgeCV
 from sklearn.ensemble import RandomForestRegressor
 import warnings
 warnings.filterwarnings('ignore')
+
+
+def enforce_strict_reproducibility(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+enforce_strict_reproducibility()
 
 
 def run_nonlinear_oos_backtest(train_window_pct=0.70, pip_cost=0.00005):

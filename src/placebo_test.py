@@ -1,10 +1,23 @@
 import os
+import random
 import numpy as np
 import pandas as pd
+import torch
 from sklearn.linear_model import RidgeCV
 from sklearn.metrics import r2_score
 import warnings
 warnings.filterwarnings('ignore')
+
+
+def enforce_strict_reproducibility(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+enforce_strict_reproducibility()
 
 
 def run_placebo_test(n_iterations=1000, model_type='ridge'):

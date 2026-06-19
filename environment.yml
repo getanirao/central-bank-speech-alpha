@@ -1,0 +1,19 @@
+name: central-bank-speech-alpha
+channels:
+  - defaults
+  - pytorch
+  - huggingface
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - transformers==4.38.0
+    - torch==2.2.0
+    - yfinance==0.2.36
+    - fredapi==0.5.1
+    - pandas==2.2.1
+    - numpy==1.26.4
+    - statsmodels==0.14.1
+    - scikit-learn==1.4.1
+    - seaborn==0.13.2
+    - matplotlib==3.8.3

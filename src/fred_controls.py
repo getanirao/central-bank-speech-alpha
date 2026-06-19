@@ -1,7 +1,20 @@
 import os
+import random
 import numpy as np
 import pandas as pd
+import torch
 from fredapi import Fred
+
+
+def enforce_strict_reproducibility(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+enforce_strict_reproducibility()
 
 
 def fetch_and_save_fred_shocks():
@@ -45,7 +58,8 @@ def fetch_and_save_fred_shocks():
     except Exception as e:
         print(f"FRED API data extraction failed: {e}. Executing fallback simulation engine...")
         dates = pd.date_range(start="2024-01-01", end="2026-06-01", freq="ME")
-        np.random.seed(42)
+        enforce_strict_reproducibility()
+
         df_fallback = pd.DataFrame(index=dates)
         df_fallback.index.name = 'date'
         df_fallback['cpi_surprise'] = np.random.normal(0, 1, len(df_fallback))

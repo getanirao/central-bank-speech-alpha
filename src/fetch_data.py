@@ -1,7 +1,21 @@
 import os
+import random
+import numpy as np
 import pandas as pd
+import torch
 import yfinance as yf
 from datasets import load_dataset
+
+
+def enforce_strict_reproducibility(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+enforce_strict_reproducibility()
 
 
 def create_directory_structure():

@@ -1,8 +1,21 @@
 import os
+import random
 import pandas as pd
 import numpy as np
+import torch
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+
+def enforce_strict_reproducibility(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+enforce_strict_reproducibility()
 
 
 def generate_correlation_dashboard():
