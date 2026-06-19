@@ -20,15 +20,20 @@ def construct_distributed_lag_matrix(df, max_lags=6):
     df = df.copy()
     for lag in range(1, max_lags + 1):
         df[f'speech_lag_{lag}'] = df['semantic_regime'].shift(lag)
+        df[f'strict_lag_{lag}'] = df['strict_regime'].shift(lag)
 
     df['returns_lag1'] = df['returns'].shift(1)
 
-    lag_cols = [f'speech_lag_{lag}' for lag in range(1, max_lags + 1)]
-    df = df.dropna(subset=lag_cols + ['returns', 'returns_lag1'])
+    all_lags = [f'speech_lag_{lag}' for lag in range(1, max_lags + 1)]
+    all_lags += [f'strict_lag_{lag}' for lag in range(1, max_lags + 1)]
+    df = df.dropna(subset=all_lags + ['returns', 'returns_lag1'])
 
-    lag_vals = [df[f'speech_lag_{i}'] for i in range(1, max_lags + 1)]
-    df['almon_term_1'] = sum(lag_vals)
-    df['almon_term_2'] = sum((i + 1) * lag_vals[i - 1] for i in range(max_lags))
+    broad_vals = [df[f'speech_lag_{i}'] for i in range(1, max_lags + 1)]
+    strict_vals = [df[f'strict_lag_{i}'] for i in range(1, max_lags + 1)]
+    df['almon_term_1'] = sum(broad_vals)
+    df['almon_term_2'] = sum((i + 1) * broad_vals[i - 1] for i in range(max_lags))
+    df['strict_almon_1'] = sum(strict_vals)
+    df['strict_almon_2'] = sum((i + 1) * strict_vals[i - 1] for i in range(max_lags))
     return df
 
 
@@ -49,13 +54,17 @@ def align_and_merge_datasets():
 
     df_speeches = pd.read_csv(speech_path, parse_dates=['date'])
     df_speeches['date'] = pd.to_datetime(df_speeches['date'], errors='coerce', utc=True).dt.tz_localize(None)
-    df_speech_agg = df_speeches.groupby('date')['semantic_score'].mean().to_frame()
+    df_speech_agg = df_speeches.groupby('date')[['semantic_score', 'strict_score']].mean()
 
     df_merged = df_h4.join(df_speech_agg, how='left')
     df_merged['semantic_score'] = df_merged['semantic_score'].fillna(0.0)
+    df_merged['strict_score'] = df_merged['strict_score'].fillna(0.0)
 
     df_merged['semantic_regime'] = df_merged['semantic_score'].replace(0.0, np.nan)
     df_merged['semantic_regime'] = df_merged['semantic_regime'].ewm(span=6, adjust=False).mean().fillna(0.0)
+
+    df_merged['strict_regime'] = df_merged['strict_score'].replace(0.0, np.nan)
+    df_merged['strict_regime'] = df_merged['strict_regime'].ewm(span=6, adjust=False).mean().fillna(0.0)
 
     df_fred = pd.read_csv(fred_path, parse_dates=['date'])
     df_fred['date'] = pd.to_datetime(df_fred['date'], utc=True).dt.tz_localize(None)

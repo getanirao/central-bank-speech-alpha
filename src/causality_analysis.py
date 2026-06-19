@@ -34,7 +34,7 @@ def execute_statistical_tests():
     adf_returns = adfuller(df['returns'])[1]
     print(f"Returns Stationarity (ADF p-value): {adf_returns:.6f}")
 
-    lag_cols = [f'speech_lag_{i}' for i in range(1, 7)]
+    lag_cols = [f'speech_lag_{i}' for i in range(1, 7)] + [f'strict_lag_{i}' for i in range(1, 7)]
     features = lag_cols + ['econ_surprise', 'returns_lag1']
     X = df[features]
     X_const = sm.add_constant(X)
@@ -128,7 +128,7 @@ def execute_statistical_tests():
     ax2.legend()
 
     ols_coefs = ols_model.params[lag_cols]
-    ridge_coefs_lag = ridge_cv.coef_[:6]
+    ridge_coefs_lag = ridge_cv.coef_[:12]
     x = np.arange(len(lag_cols))
     width = 0.35
     ax3.bar(x - width / 2, ols_coefs, width, color='seagreen', alpha=0.8, edgecolor='black', label='OLS')
@@ -138,15 +138,17 @@ def execute_statistical_tests():
     ax3.set_title("Distributed Lags: OLS vs Ridge")
     ax3.set_ylabel("Beta Strength")
     ax3.set_xticks(x)
-    ax3.set_xticklabels(['Lag 1\n(4h)', 'Lag 2\n(8h)', 'Lag 3\n(12h)', 'Lag 4\n(16h)', 'Lag 5\n(20h)', 'Lag 6\n(24h)'])
+    ax3.set_xticklabels(['L1', 'L2', 'L3', 'L4', 'L5', 'L6',
+                         'S1', 'S2', 'S3', 'S4', 'S5', 'S6'])
     ax3.legend()
 
-    xgb_imps = xgb_importances[:6]
+    xgb_imps = xgb_importances[:12]
     ax4.bar(x, xgb_imps, width=0.5, color='crimson', alpha=0.7, edgecolor='black')
-    ax4.set_title("XGBoost Feature Importances (Lags + Macro)")
+    ax4.set_title("XGBoost Feature Importances (Broad + Strict Lags)")
     ax4.set_ylabel("Importance")
     ax4.set_xticks(x)
-    ax4.set_xticklabels(['Lag 1\n(4h)', 'Lag 2\n(8h)', 'Lag 3\n(12h)', 'Lag 4\n(16h)', 'Lag 5\n(20h)', 'Lag 6\n(24h)'])
+    ax4.set_xticklabels(['L1', 'L2', 'L3', 'L4', 'L5', 'L6',
+                         'S1', 'S2', 'S3', 'S4', 'S5', 'S6'])
 
     plt.tight_layout()
     plt.savefig(plot_path, dpi=200)

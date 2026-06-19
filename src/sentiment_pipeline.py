@@ -17,15 +17,13 @@ def enforce_strict_reproducibility(seed=42):
 enforce_strict_reproducibility()
 
 
-def is_decision_relevant(text):
-    """Filters out background academic texts, forcing focus onto near-term policy signals."""
+def count_policy_keywords(text):
     policy_keywords = [
         'inflation', 'interest rate', 'hawkish', 'dovish', 'tightening',
         'monetary policy', 'fomc', 'hike', 'cut', 'yield', 'employment'
     ]
     text_lower = str(text).lower()
-    match_count = sum(1 for word in policy_keywords if word in text_lower)
-    return match_count >= 1
+    return sum(1 for word in policy_keywords if word in text_lower)
 
 
 def get_model_path():
@@ -48,8 +46,9 @@ def run_sentiment_analysis(batch_size=16):
     df = df.dropna(subset=['date', 'clean_text'])
 
     print(f"Pre-filter speech count: {len(df)}")
-    df = df[df['clean_text'].apply(is_decision_relevant)]
-    print(f"Post-filter relevant speech count: {len(df)}")
+    df['keyword_count'] = df['clean_text'].apply(count_policy_keywords)
+    df = df[df['keyword_count'] >= 1]
+    print(f"Post-filter (>=1 keyword) speech count: {len(df)}")
 
     if len(df) == 0:
         print("Warning: Topic filter dropped all rows. Lower keyword constraints.")
@@ -89,11 +88,13 @@ def run_sentiment_analysis(batch_size=16):
             raw_scores.append(map_label_to_score(res['label'], res['score']))
 
     df['semantic_score'] = raw_scores
+    df['strict_score'] = df.apply(lambda r: r['semantic_score'] if r['keyword_count'] >= 3 else 0.0, axis=1)
     df['date_4h'] = df['date'].dt.ceil('4h')
 
     df_grouped = df.groupby(['date_4h', 'author', 'country'], as_index=False).agg({
         'clean_text': 'first',
-        'semantic_score': 'mean'
+        'semantic_score': 'mean',
+        'strict_score': 'mean'
     }).rename(columns={'date_4h': 'date'})
 
     df_grouped.to_csv(output_path, index=False)

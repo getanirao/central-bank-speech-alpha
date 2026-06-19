@@ -48,7 +48,9 @@ def _apply_trading_costs(test_df, pip_cost=0.00005):
 
 
 def get_features():
-    return [f'speech_lag_{i}' for i in range(1, 7)] + ['econ_surprise', 'returns_lag1']
+    broad = [f'speech_lag_{i}' for i in range(1, 7)]
+    strict = [f'strict_lag_{i}' for i in range(1, 7)]
+    return broad + strict + ['econ_surprise', 'returns_lag1']
 
 
 def run_static_backtest(model_type='ridge', train_window_pct=0.70, pip_cost=0.00005):
