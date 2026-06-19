@@ -23,10 +23,10 @@ FRED CPI/NFP ──> econ_surprise Z-score ─────────┘
 | `speech_lag_1` | 0–4h | -0.0004 | 0.461 | |
 | `speech_lag_2` | 4–8h | -3.9e-05 | 0.959 | |
 | `speech_lag_3` | 8–12h | -0.0006 | 0.421 | |
-| **`speech_lag_4`** | **12–16h** | **+0.0017** | **0.026** | **✅** |
+| **`speech_lag_4`** | **12–16h** | **+0.0017** | **0.026** | **Yes** |
 | `speech_lag_5` | 16–20h | -0.0005 | 0.540 | |
 | `speech_lag_6` | 20–24h | -0.0001 | 0.827 | |
-| `econ_surprise` | — | **+0.0003** | **0.000** | **✅** |
+| `econ_surprise` | — | **+0.0003** | **0.000** | **Yes** |
 
 Model fit: **R² = 0.022**, F-test p = 2.86e-12
 
@@ -34,10 +34,10 @@ Model fit: **R² = 0.022**, F-test p = 2.86e-12
 
 | Lags | p-value | Significant |
 |---|---|---|
-| 1 (4h) | 0.0490 | ✅ |
+| 1 (4h) | 0.0490 | Yes |
 | 2 (8h) | 0.1103 | |
 | 3 (12h) | 0.1506 | |
-| 4 (16h) | 0.0486 | ✅ |
+| 4 (16h) | 0.0486 | Yes |
 | 5 (20h) | 0.0591 | |
 | 6 (24h) | 0.1115 | |
 
@@ -47,12 +47,12 @@ Because consecutive forward-filled lags share ~99% variance, the distributed lag
 
 | Lag | OLS Coef | OLS p-value | Ridge Coef (α=10) | Survives? |
 |---|---|---|---|---|
-| 1 (4h) | -0.0004 | 0.461 | -0.0003 | ❌ |
-| 2 (8h) | -4e-05 | 0.959 | -0.0001 | ❌ |
-| 3 (12h) | -0.0006 | 0.421 | -0.0001 | ❌ |
-| **4 (16h)** | **+0.0017** | **0.026** | **+0.0006** | **✅ peak** |
-| 5 (20h) | -0.0005 | 0.540 | +0.0000 | ❌ |
-| 6 (24h) | -0.0001 | 0.827 | -0.0001 | ❌ |
+| 1 (4h) | -0.0004 | 0.461 | -0.0003 | No |
+| 2 (8h) | -4e-05 | 0.959 | -0.0001 | No |
+| 3 (12h) | -0.0006 | 0.421 | -0.0001 | No |
+| **4 (16h)** | **+0.0017** | **0.026** | **+0.0006** | **Yes (peak)** |
+| 5 (20h) | -0.0005 | 0.540 | +0.0000 | No |
+| 6 (24h) | -0.0001 | 0.827 | -0.0001 | No |
 
 Ridge shrinks all noise lags to near-zero **except Lag-4**, which retains the highest coefficient. R² barely drops (0.02220 → 0.02152, 97% retained). This proves the 16-hour signal is structurally real, not a collinearity artifact.
 
@@ -60,7 +60,7 @@ Ridge shrinks all noise lags to near-zero **except Lag-4**, which retains the hi
 
 | Metric | OLS | Ridge (α=10) |
 |---|---|---|
-| **OOS R²** | **+0.00434** ✅ | **+0.00634** ✅ (+46%) |
+| **OOS R²** | **+0.00434** (positive) | **+0.00634** (positive, +46% vs OLS) |
 | **Directional Hit Rate** | **60.97%** | **60.97%** |
 | **Information Ratio (annual.)** | **0.4837** | **0.4837** |
 | **OOS Strategy Return** | **+33.25%** | **+33.25%** |
@@ -88,7 +88,7 @@ Lasso is the strictest test of feature relevance — if `speech_lag_4` gets driv
 
 | Variable | OLS Coef | OLS p-value | Ridge Coef (α=10) | **Lasso Coef (α=0.0001)** | Lasso Verdict |
 |---|---|---|---|---|---|
-| `speech_lag_4` | **+0.0017** | 0.026 | +0.0006 | **0.0000000** | ❌ ZEROED OUT |
+| `speech_lag_4` | **+0.0017** | 0.026 | +0.0006 | **0.0000000** | ZEROED OUT |
 
 **Interpretation**: The 16-hour effect is real (OLS p=0.026, Ridge preserves it) but **economically small**. The signal is dominated by macro momentum (`econ_surprise`). This is a honest result — central bank wording changes move markets in basis points, not percentage points. The model needs a live speech RSS feed to strengthen the signal-to-noise ratio.
 
@@ -150,11 +150,11 @@ The most recent window (Jun'25→Feb'26) shows strong positive OOS R² of +0.048
 
 | Defense | Test | Verdict | Meaning |
 |---|---|---|---|
-| PIT Fix | `ceil('4h')` | ✅ Fixed | No look-ahead bias |
-| Lasso (L1) | `speech_lag_4` zeroed? | ⚠️ ZEROED | Signal is real but economically weak |
-| Placebo (1000x) | p < 0.05? | ❌ FAIL | Macro dominates; RSS feed needed |
-| Transaction cost | 0.5 pip drag | ✅ Negligible | H4 frequency is cost-immune |
-| Rolling CV | Lag-4 stable? | ✅ Stable | +0.048 OOS R² in latest window |
+| PIT Fix | `ceil('4h')` | Fixed | No look-ahead bias |
+| Lasso (L1) | `speech_lag_4` zeroed? | ZEROED | Signal is real but economically weak |
+| Placebo (1000x) | p < 0.05? | FAIL | Macro dominates; RSS feed needed |
+| Transaction cost | 0.5 pip drag | Negligible | H4 frequency is cost-immune |
+| Rolling CV | Lag-4 stable? | Stable | +0.048 OOS R² in latest window |
 
 **Bottom line**: The model's core predictions are **honest and defensible**. The speech signal is real (survives OLS, Ridge, Granger Lag-4 at p<0.05) but economically small. The dominant predictive power comes from FRED macro controls. A live speech RSS feed with daily coverage would dramatically strengthen the speech-specific alpha.
 
@@ -203,9 +203,9 @@ Hypothetical ECB rate-hike statement scored and evaluated with current macro:
 
 | Condition | Speech | Macro | Signal | Consistent? |
 |---|---|---|---|---|
-| Warsh live | -0.6359 (dovish) | +0.0863 (hot) | BUY | ✅ Macro overrides dovish speech |
-| Warsh + recession | -0.6359 (dovish) | -2.1000 (crash) | SELL | ✅ Speech + macro align → short |
-| ECB hawkish | +0.9971 (hawkish) | +0.0863 (hot) | BUY | ✅ Speech + macro align → long |
+| Warsh live | -0.6359 (dovish) | +0.0863 (hot) | BUY | Consistent (macro overrides dovish speech) |
+| Warsh + recession | -0.6359 (dovish) | -2.1000 (crash) | SELL | Consistent (speech + macro align to short) |
+| ECB hawkish | +0.9971 (hawkish) | +0.0863 (hot) | BUY | Consistent (speech + macro align to long) |
 
 The model never produces a contradictory signal across any tested scenario.
 
