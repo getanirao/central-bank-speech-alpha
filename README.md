@@ -97,10 +97,10 @@ The previous `ffill()` held speech scores constant until the next speech — a h
 
 | Model | OOS R² | Hit Rate | Info Ratio | Total Return | Status |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **Ridge (L2)** | **+0.02118** | **60.97%** | **0.483** | **+33.21%** | 🟢 **Production Champion** |
-| Random Forest | +0.00651 | 60.76% | 0.472 | +32.36% | 🟡 Overfitted OOS |
-| OLS | +0.00564 | 60.97% | 0.483 | +33.21% | ⚪ Baseline Econometric |
-| Almon PDL | +0.00563 | 60.97% | 0.483 | +33.21% | ⚪ Linear Poly-Constrained |
+| **Ridge (L2)** | **+0.02118** | **60.97%** | **0.483** | **+33.21%** | **Production Champion** |
+| Random Forest | +0.00651 | 60.76% | 0.472 | +32.36% | Overfitted OOS |
+| OLS | +0.00564 | 60.97% | 0.483 | +33.21% | Baseline Econometric |
+| Almon PDL | +0.00563 | 60.97% | 0.483 | +33.21% | Linear Poly-Constrained |
 
 > Metrics evaluated under strict Point-in-Time (PIT) `ceil('4h')` constraints with a 0.5-pip transaction cost penalty applied to every trade entry flip.
 
