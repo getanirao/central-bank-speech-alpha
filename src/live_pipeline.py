@@ -41,7 +41,7 @@ def run_live_production_signal():
     live_speech_feed = [
         {
             "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "text": "Inflation remains a core target. The economic framework demands sustained normalization and restrictive policy profiles."
+            "text": "The Committee decided to maintain the target rate... Inflation remains elevated... The Committee will deliver price stability... Forward guidance is not well suited for the current policy conjuncture."
         }
     ]
 
