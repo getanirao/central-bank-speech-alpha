@@ -27,3 +27,6 @@ Thumbs.db
 
 # HuggingFace cache
 .cache/
+
+# Trained model weights
+models/

@@ -7,6 +7,15 @@ from fredapi import Fred
 from transformers import pipeline
 
 
+def get_model_path():
+    local_path = os.path.join('models', 'modernfinbert_finetuned')
+    if os.path.exists(local_path) and any(f.endswith('.bin') or f.endswith('.safetensors') for f in os.listdir(local_path)):
+        print(f"  Using fine-tuned model from: {local_path}")
+        return local_path
+    print("  No fine-tuned model found, using base ModernFinBERT")
+    return "tabularisai/ModernFinBERT"
+
+
 def run_live_production_signal():
     """
     Downloads live, up-to-the-minute market data and calculates
@@ -47,7 +56,7 @@ def run_live_production_signal():
 
     sentiment_engine = pipeline(
         "sentiment-analysis",
-        model="tabularisai/ModernFinBERT",
+        model=get_model_path(),
         device=-1
     )
 

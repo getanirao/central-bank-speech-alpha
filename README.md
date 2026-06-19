@@ -219,11 +219,13 @@ The multi-lag OLS coefficients (top), residual distribution (middle), and Almon 
 ```
 ├── src/
 │   ├── fetch_data.py             # FX + speech data ingestion
+│   ├── train_sentiment.py        # Fine-tune ModernFinBERT on financial news
 │   ├── sentiment_pipeline.py     # ModernFinBERT + topic filter
 │   ├── fred_controls.py          # FRED CPI/NFP macro shocks
 │   ├── align_and_merge.py        # Distributed lags + merge
 │   ├── causality_analysis.py     # Multi-lag OLS + Ridge + Granger + 3-panel plot
 │   ├── backtest_engine.py        # Walk-forward OOS validation (OLS + Ridge + rolling CV)
+│   ├── train_sentiment.py        # Fine-tune ModernFinBERT on financial news
 │   ├── placebo_test.py           # Permutation test (1,000x shuffle)
 │   ├── live_pipeline.py          # Real-time signal engine
 │   └── visualize_correlation.py  # Feature correlation heatmap + digestion curve

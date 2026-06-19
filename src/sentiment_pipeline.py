@@ -15,6 +15,15 @@ def is_decision_relevant(text):
     return match_count >= 3
 
 
+def get_model_path():
+    local_path = os.path.join('models', 'modernfinbert_finetuned')
+    if os.path.exists(local_path) and any(f.endswith('.bin') or f.endswith('.safetensors') for f in os.listdir(local_path)):
+        print(f"  Using fine-tuned model from: {local_path}")
+        return local_path
+    print("  No fine-tuned model found, using base ModernFinBERT")
+    return "tabularisai/ModernFinBERT"
+
+
 def run_sentiment_analysis(batch_size=16):
     input_path = os.path.join('data', 'speeches.csv')
     output_path = os.path.join('data', 'speeches_scored.csv')
@@ -40,11 +49,12 @@ def run_sentiment_analysis(batch_size=16):
     df = df[df['date'] >= window_start]
 
     device = 0 if torch.cuda.is_available() else -1
+    model_path = get_model_path()
     print(f"Initializing ModernFinBERT on device: {'GPU (0)' if device == 0 else 'CPU'}")
 
     sentiment_engine = pipeline(
         "sentiment-analysis",
-        model="tabularisai/ModernFinBERT",
+        model=model_path,
         device=device
     )
 

@@ -13,19 +13,30 @@ from visualize_correlation import generate_correlation_dashboard
 from placebo_test import run_placebo_test
 
 
-def run_pipeline():
-    print("=================================================================")
-    print("     LAUNCHING FX QUANT LANGUAGE MODEL PIPELINE PHASE 2.0        ")
-    print("=================================================================\n")
+def run_pipeline(training_samples=500):
+    print("=" * 70)
+    print("     FX QUANT LANGUAGE MODEL PIPELINE")
+    print("=" * 70)
+
+    # --- Phase -1: Fine-tune ModernFinBERT (if not already done) ---
+    model_dir = os.path.join('models', 'modernfinbert_finetuned')
+    model_ready = os.path.exists(model_dir) and any(
+        f.endswith('.safetensors') for f in os.listdir(model_dir))
+    if not model_ready:
+        print("\n--- Phase 0: Fine-Tuning ModernFinBERT on Financial Sentiment ---")
+        from train_sentiment import train_model
+        train_model(max_samples=training_samples)
+    else:
+        print("\nFine-tuned ModernFinBERT found — skipping training.")
 
     create_directory_structure()
     fetch_fx_data(ticker="EURUSD=X", period="2y", interval="1h")
     fetch_speech_corpus()
 
-    print("\n--- Phase 1.5: Executing FRED Macro Engine Realignment ---")
+    print("\n--- Phase 1: Executing FRED Macro Engine Realignment ---")
     fetch_and_save_fred_shocks()
 
-    print("\n--- Phase 2: Processing Filtered Text through FinBERT Pipeline ---")
+    print("\n--- Phase 2: Processing Filtered Text through ModernFinBERT ---")
     run_sentiment_analysis(batch_size=16)
 
     print("\n--- Phase 3: Merging Continuous Time-Series Horizons ---")
