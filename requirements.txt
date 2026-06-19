@@ -7,4 +7,5 @@ statsmodels>=0.14
 datasets>=2.17
 scikit-learn>=1.4
 matplotlib>=3.8
+seaborn>=0.13
 fredapi>=0.3

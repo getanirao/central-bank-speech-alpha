@@ -106,6 +106,22 @@ Hypothetical ECB rate-hike statement scored and evaluated with current macro:
 
 The model never produces a contradictory signal across any tested scenario.
 
+## Diagnostic Visualizations
+
+### Panel 1: 3-Panel Econometric Dashboard
+
+The multi-lag OLS coefficients (top), residual distribution (middle), and Almon coefficient bar chart with 95% CI (bottom). The Lag-4 bar at 16h is the only bar that fully clears the zero baseline.
+
+![3-Panel Diagnostic Dashboard](notebooks/shape_analysis.png)
+
+### Panel 2: Correlation Shape Analysis
+
+**Left**: Feature correlation heatmap showing the weak partial correlations of speech_lag_1 through speech_lag_6 against returns, with the FRED macro shock column standing out as the strongest signal.
+
+**Right**: The linguistic signal digestion curve — the correlation between returns and speech score is flat or slightly negative for lags 1–3 (0–12h), then peaks distinctly at lag 4 (16h), confirming the institutional rebalancing thesis.
+
+![Correlation Dashboard](notebooks/correlation_shapes.png)
+
 ## Project Structure
 
 ```
