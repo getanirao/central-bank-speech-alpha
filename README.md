@@ -2,12 +2,12 @@
 
 **Central Bank Speech Sentiment → EUR/USD Return Prediction**
 
-A quantitative finance pipeline that uses HuggingFace's `FinancialBERT-Sentiment-Analysis` to extract hawkish/dovish semantic scores from ECB and Fed speeches, aligns them with EUR/USD price action on 4-hour bars, controls for real FRED macroeconomic shocks (CPI, NFP), and statistically validates the predictive edge via distributed-lag OLS regression and walk-forward out-of-sample backtesting.
+A quantitative finance pipeline that uses HuggingFace's `ModernFinBERT` to extract hawkish/dovish semantic scores from ECB and Fed speeches, aligns them with EUR/USD price action on 4-hour bars, controls for real FRED macroeconomic shocks (CPI, NFP), and statistically validates the predictive edge via distributed-lag OLS regression and walk-forward out-of-sample backtesting.
 
 ## Architecture
 
 ```
-speeches ──> FinancialBERT ──> semantic_score ──┐
+speeches ──> ModernFinBERT ──> semantic_score ──┐
                                                  ├──> distributed lags (lag_1..lag_6) ──> OLS + Ridge ──> signal
 EUR/USD ──> yfinance H4 bars ──> returns ───────┤
                                                  │
@@ -155,12 +155,12 @@ Tested against Chairman Warsh's actual introductory statement: *"The Committee d
 
 | Component | Result |
 |---|---|
-| FinancialBERT score | **-0.6359** (NEGATIVE/dovish) |
+| ModernFinBERT score | **-0.6359** (NEGATIVE/dovish) |
 | Live FRED macro surprise | +0.0863 |
 | Predicted return | **+0.0247** |
 | **Signal** | **BUY / LONG** |
 
-**Model logic**: FinancialBERT read "maintain" and "not well suited" as cautious/dovish language. However, the positive macro momentum (+0.0863) overwhelmed the weak speech signal, producing a BUY. This captures the *Confounding Variable Trap* — a cautious central banker cannot override a hot economy.
+**Model logic**: ModernFinBERT read "maintain" and "not well suited" as cautious/dovish language. However, the positive macro momentum (+0.0863) overwhelmed the weak speech signal, producing a BUY. This captures the *Confounding Variable Trap* — a cautious central banker cannot override a hot economy.
 
 ### Scenario A: Recession Shock (Warsh + Negative NFP)
 
@@ -219,7 +219,7 @@ The multi-lag OLS coefficients (top), residual distribution (middle), and Almon 
 ```
 ├── src/
 │   ├── fetch_data.py             # FX + speech data ingestion
-│   ├── sentiment_pipeline.py     # FinancialBERT + topic filter
+│   ├── sentiment_pipeline.py     # ModernFinBERT + topic filter
 │   ├── fred_controls.py          # FRED CPI/NFP macro shocks
 │   ├── align_and_merge.py        # Distributed lags + merge
 │   ├── causality_analysis.py     # Multi-lag OLS + Ridge + Granger + 3-panel plot
@@ -258,7 +258,7 @@ python src/live_pipeline.py
 ## Methodology
 
 1. **Topic Filter**: Speeches must contain ≥3 policy keywords (inflation, interest rate, hawkish, etc.)
-2. **Sentiment Scoring**: FinancialBERT maps speech text → numeric score (+=hawkish, -=dovish)
+2. **Sentiment Scoring**: ModernFinBERT maps speech text → numeric score (+=hawkish, -=dovish)
 3. **Distributed Lags**: 6 sequential 4-hour lag columns capture the delayed price digestion curve
 4. **OLS + Ridge Regression**: `returns ~ lag_1 + lag_2 + ... + lag_6 + econ_surprise + returns_lag1` — Ridge (α=10) handles multicollinearity and confirms Lag-4 signal
 5. **Walk-Forward**: 70% historical train → predict next 30% out-of-sample, metrics computed on unseen data

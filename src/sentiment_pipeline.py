@@ -40,11 +40,11 @@ def run_sentiment_analysis(batch_size=16):
     df = df[df['date'] >= window_start]
 
     device = 0 if torch.cuda.is_available() else -1
-    print(f"Initializing FinancialBERT on device: {'GPU (0)' if device == 0 else 'CPU'}")
+    print(f"Initializing ModernFinBERT on device: {'GPU (0)' if device == 0 else 'CPU'}")
 
     sentiment_engine = pipeline(
         "sentiment-analysis",
-        model="ahmedrachid/FinancialBERT-Sentiment-Analysis",
+        model="tabularisai/ModernFinBERT",
         device=device
     )
 

@@ -47,7 +47,7 @@ def run_live_production_signal():
 
     sentiment_engine = pipeline(
         "sentiment-analysis",
-        model="ahmedrachid/FinancialBERT-Sentiment-Analysis",
+        model="tabularisai/ModernFinBERT",
         device=-1
     )
 
