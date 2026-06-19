@@ -25,7 +25,7 @@ def is_decision_relevant(text):
     ]
     text_lower = str(text).lower()
     match_count = sum(1 for word in policy_keywords if word in text_lower)
-    return match_count >= 3
+    return match_count >= 1
 
 
 def get_model_path():

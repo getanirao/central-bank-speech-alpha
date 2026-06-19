@@ -41,7 +41,7 @@ def fetch_speech_corpus():
 
     speeches_list = []
     for i, record in enumerate(dataset):
-        if i >= 5000:
+        if i >= 20000:
             break
         speeches_list.append({
             'date': record.get('date'),
