@@ -3,8 +3,10 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import grangercausalitytests, adfuller
-from sklearn.linear_model import RidgeCV
+from sklearn.linear_model import RidgeCV, LassoCV
 import matplotlib.pyplot as plt
+import warnings
+warnings.filterwarnings('ignore')
 
 
 def execute_statistical_tests():
@@ -12,11 +14,11 @@ def execute_statistical_tests():
     plot_path = os.path.join('notebooks', 'shape_analysis.png')
     df = pd.read_csv(input_path, index_col=0, parse_dates=True)
 
-    print("\n=======================================================")
-    print("      PHASE 2 ECONOMETRIC MATRIX SOUNDNESS CHECK       ")
-    print("=======================================================")
+    print("\n" + "=" * 70)
+    print("      PHASE 2 ECONOMETRIC MATRIX SOUNDNESS CHECK")
+    print("=" * 70)
     adf_returns = adfuller(df['returns'])[1]
-    print(f"Returns Line Stationarity ADF p-value: {adf_returns:.6f}")
+    print(f"Returns Stationarity (ADF p-value): {adf_returns:.6f}")
 
     lag_cols = [f'speech_lag_{i}' for i in range(1, 7)]
     features = lag_cols + ['econ_surprise', 'returns_lag1']
@@ -24,44 +26,67 @@ def execute_statistical_tests():
     X_const = sm.add_constant(X)
     y = df['returns']
 
-    # --- OLS (statsmodels) ---
+    # --- OLS ---
     ols_model = sm.OLS(y, X_const).fit()
 
-    # --- Ridge (sklearn) with automatic alpha selection ---
+    # --- Ridge ---
     ridge_cv = RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0, 100.0], scoring='neg_mean_squared_error')
     ridge_cv.fit(X, y)
     ridge_coefs = np.concatenate([[ridge_cv.intercept_], ridge_cv.coef_])
 
-    print("\n=======================================================")
-    print("      OLS vs RIDGE COEFFICIENT COMPARISON              ")
-    print("=======================================================")
-    print(f"{'Variable':<20} {'OLS Coef':>10} {'OLS p-value':>12} {'Ridge Coef':>10}")
-    print("-" * 54)
+    # --- Lasso (L1) Sparsity Filter ---
+    lasso_cv = LassoCV(alphas=[0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
+                       max_iter=20000, random_state=42, cv=5)
+    lasso_cv.fit(X, y)
+    lasso_coefs = np.concatenate([[lasso_cv.intercept_], lasso_cv.coef_])
+
+    print("\n" + "=" * 70)
+    print("      OLS vs RIDGE vs LASSO COEFFICIENT COMPARISON")
+    print("=" * 70)
+    header = f"{'Variable':<20} {'OLS Coef':>10} {'OLS p':>8} {'Ridge Coef':>10} {'Lasso Coef':>10}"
+    print(header)
+    print("-" * 60)
     var_names = ['const'] + features
     for i, name in enumerate(var_names):
         ols_c = ols_model.params.iloc[i]
         ols_p = ols_model.pvalues.iloc[i]
         ridge_c = ridge_coefs[i]
+        lasso_c = lasso_coefs[i]
         sig = " **" if ols_p < 0.05 else ""
-        print(f"{name:<20} {ols_c:>+10.6f} {ols_p:>12.4f}{sig} {ridge_c:>+10.6f}")
+        lasso_flag = " ZERO" if abs(lasso_c) < 1e-8 else ""
+        print(f"{name:<20} {ols_c:>+10.6f} {ols_p:>8.4f}{sig} {ridge_c:>+10.6f} {lasso_c:>+10.6f}{lasso_flag}")
 
     print(f"\nRidge CV selected alpha = {ridge_cv.alpha_:.4f}")
-    print(f"OLS In-Sample R² = {ols_model.rsquared:.5f}")
+    print(f"Lasso CV selected alpha = {lasso_cv.alpha_:.6f}")
+    print(f"OLS In-Sample R2 = {ols_model.rsquared:.5f}")
 
-    # Ridge R² (in-sample)
+    # Ridge R2
     y_pred_ridge = ridge_cv.predict(X)
     ss_res = np.sum((y - y_pred_ridge) ** 2)
     ss_tot = np.sum((y - np.mean(y)) ** 2)
     ridge_r2 = 1 - ss_res / ss_tot
-    print(f"Ridge In-Sample R² = {ridge_r2:.5f}")
+    print(f"Ridge In-Sample R2 = {ridge_r2:.5f}")
 
-    print("\n=======================================================")
-    print("      PHASE 2 MULTI-LAG GRANGER CAUSALITY TEST         ")
-    print("=======================================================")
+    # Lasso R2
+    y_pred_lasso = lasso_cv.predict(X)
+    ss_res_l = np.sum((y - y_pred_lasso) ** 2)
+    lasso_r2 = 1 - ss_res_l / ss_tot
+    print(f"Lasso In-Sample R2 = {lasso_r2:.5f}")
+
+    # Check if Lag-4 survives Lasso
+    lasso_lag4 = lasso_cv.coef_[3]
+    if abs(lasso_lag4) < 1e-8:
+        print("\nLASSO VERDICT: speech_lag_4 ZEROED OUT by L1 penalty \u2014 signal may be too weak")
+    else:
+        print(f"\nLASSO VERDICT: speech_lag_4 SURVIVES at {lasso_lag4:+.6f} \u2014 signal is structurally robust")
+
+    print("\n" + "=" * 70)
+    print("      MULTI-LAG GRANGER CAUSALITY TEST")
+    print("=" * 70)
     df_granger = df[['returns', 'semantic_regime']]
     grangercausalitytests(df_granger, maxlag=6, verbose=True)
 
-    # --- Three-panel plot (now with OLS vs Ridge overlay) ---
+    # --- Three-panel plot (OLS vs Ridge vs Lasso overlay) ---
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 14))
 
     df['cumulative_returns'] = (1 + df['returns']).cumprod() - 1
@@ -71,31 +96,34 @@ def execute_statistical_tests():
     ax1.set_title("EUR/USD Returns vs. Speech Semantic Adjustments")
 
     ax2.plot(ols_model.resid, color='purple', alpha=0.4, label='OLS Residuals')
-    # Ridge residuals
     ridge_resid = y - y_pred_ridge
     ax2.plot(ridge_resid, color='green', alpha=0.2, label='Ridge Residuals')
+    lasso_resid = y - y_pred_lasso
+    ax2.plot(lasso_resid, color='red', alpha=0.15, label='Lasso Residuals')
     ax2.axhline(0, color='black', linestyle=':')
-    ax2.set_title("Econometric Residual Error Distribution (OLS purple, Ridge green)")
+    ax2.set_title("Residual Error Distribution (purple=OLS, green=Ridge, red=Lasso)")
     ax2.legend()
 
-    # Panel 3: Dual coefficient bars
+    # Panel 3: Triple coefficient bars
     ols_coefs = ols_model.params[lag_cols]
     ridge_coefs_lag = ridge_cv.coef_[:6]
+    lasso_coefs_lag = lasso_cv.coef_[:6]
     x = np.arange(len(lag_cols))
-    width = 0.35
+    width = 0.25
 
-    ax3.bar(x - width/2, ols_coefs, width, color='seagreen', alpha=0.8, edgecolor='black', label='OLS')
-    ax3.bar(x + width/2, ridge_coefs_lag, width, color='darkorange', alpha=0.8, edgecolor='black', label=f'Ridge (α={ridge_cv.alpha_:.2f})')
+    ax3.bar(x - width, ols_coefs, width, color='seagreen', alpha=0.8, edgecolor='black', label='OLS')
+    ax3.bar(x, ridge_coefs_lag, width, color='darkorange', alpha=0.8, edgecolor='black', label=f'Ridge (a={ridge_cv.alpha_:.2f})')
+    ax3.bar(x + width, lasso_coefs_lag, width, color='crimson', alpha=0.8, edgecolor='black', label=f'Lasso (a={lasso_cv.alpha_:.5f})')
     ax3.axhline(0, color='black', linestyle='-', linewidth=0.8)
-    ax3.set_title("Almon Distributed Coefficients: OLS vs Ridge (95% CI bars on OLS)")
-    ax3.set_ylabel("Beta Strength Multiplier")
+    ax3.set_title("Almon Distributed Lags: OLS vs Ridge vs Lasso")
+    ax3.set_ylabel("Beta Strength")
     ax3.set_xticks(x)
     ax3.set_xticklabels(['Lag 1\n(4h)', 'Lag 2\n(8h)', 'Lag 3\n(12h)', 'Lag 4\n(16h)', 'Lag 5\n(20h)', 'Lag 6\n(24h)'])
     ax3.legend()
 
     plt.tight_layout()
     plt.savefig(plot_path, dpi=200)
-    print(f"\nPhase 3 Diagnostic Dashboard compiled successfully to: {plot_path}")
+    print(f"\nDiagnostic Dashboard saved to: {plot_path}")
 
 
 if __name__ == "__main__":

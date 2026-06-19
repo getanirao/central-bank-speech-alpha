@@ -10,6 +10,7 @@ from align_and_merge import align_and_merge_datasets
 from causality_analysis import execute_statistical_tests
 from backtest_engine import run_comparison_backtest
 from visualize_correlation import generate_correlation_dashboard
+from placebo_test import run_placebo_test
 
 
 def run_pipeline():
@@ -36,7 +37,10 @@ def run_pipeline():
     print("\n--- Phase 5: Executing Forward Walk Out-of-Sample Backtest ---")
     run_comparison_backtest(train_window_pct=0.70)
 
-    print("\n--- Phase 6: Generating Diagnostic Correlation Heatmaps & Shapes ---")
+    print("\n--- Phase 6: Permutation / Placebo Test (1000x shuffle) ---")
+    run_placebo_test(n_iterations=1000)
+
+    print("\n--- Phase 7: Generating Diagnostic Correlation Heatmaps & Shapes ---")
     generate_correlation_dashboard()
 
 

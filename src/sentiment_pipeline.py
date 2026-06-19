@@ -66,7 +66,7 @@ def run_sentiment_analysis(batch_size=16):
             raw_scores.append(map_label_to_score(res['label'], res['score']))
 
     df['semantic_score'] = raw_scores
-    df['date_4h'] = df['date'].dt.floor('4h')
+    df['date_4h'] = df['date'].dt.ceil('4h')
 
     df_grouped = df.groupby(['date_4h', 'author', 'country'], as_index=False).agg({
         'clean_text': 'first',
