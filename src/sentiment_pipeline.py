@@ -71,9 +71,21 @@ def run_sentiment_analysis(batch_size=16):
     )
 
     def map_label_to_score(label, score):
-        if label.lower() == 'positive':
+        lbl = label.lower()
+        # Fine-tuned model: Hawkish / Dovish / Neutral
+        if lbl == 'hawkish':
             return score
-        if label.lower() == 'negative':
+        if lbl == 'dovish':
+            return -score
+        # Base model: bearish / bullish / neutral
+        if lbl == 'bearish':
+            return score
+        if lbl == 'bullish':
+            return -score
+        # positive/negative (legacy fallback)
+        if lbl == 'positive':
+            return score
+        if lbl == 'negative':
             return -score
         return 0.0
 

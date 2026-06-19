@@ -52,6 +52,9 @@ def align_and_merge_datasets():
     df_h4 = df_prices.resample('4h').agg(ohlc_dict).dropna(subset=['Close'])
     df_h4['returns'] = np.log(df_h4['Close'] / df_h4['Close'].shift(1))
 
+    # Phase 3: Feature Engineering — volatility regime
+    df_h4['hv_20'] = df_h4['returns'].rolling(20).std()
+
     df_speeches = pd.read_csv(speech_path, parse_dates=['date'])
     df_speeches['date'] = pd.to_datetime(df_speeches['date'], errors='coerce', utc=True).dt.tz_localize(None)
     df_speech_agg = df_speeches.groupby('date')[['semantic_score', 'strict_score']].mean()
@@ -73,6 +76,12 @@ def align_and_merge_datasets():
     df_merged['econ_surprise'] = df_merged['econ_surprise'].ffill().fillna(0.0)
 
     df_merged = construct_distributed_lag_matrix(df_merged, max_lags=6)
+
+    # Phase 3: Speech-macro interaction and sentiment momentum
+    df_merged['speech_macro_interact'] = df_merged['semantic_regime'] * df_merged['econ_surprise']
+    df_merged['sentiment_momentum'] = df_merged['semantic_regime'] - df_merged['semantic_regime'].shift(6)
+
+    df_merged = df_merged.dropna(subset=['returns', 'hv_20', 'speech_macro_interact', 'sentiment_momentum'])
 
     df_merged.to_csv(output_path)
     print(f"Phase 2 multi-lag baseline compiled to {output_path} ({len(df_merged)} entries).")

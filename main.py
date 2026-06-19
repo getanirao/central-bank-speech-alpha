@@ -27,20 +27,13 @@ from visualize_correlation import generate_correlation_dashboard
 from placebo_test import run_placebo_test
 
 
-def run_pipeline(training_samples=500):
+def run_pipeline():
     print("=" * 70)
     print("     FX QUANT LANGUAGE MODEL PIPELINE")
     print("=" * 70)
 
-    model_dir = os.path.join('models', 'modernfinbert_finetuned')
-    model_ready = os.path.exists(model_dir) and any(
-        f.endswith('.safetensors') for f in os.listdir(model_dir))
-    if not model_ready:
-        print("\n--- Phase 0: Fine-Tuning ModernFinBERT ---")
-        from train_sentiment import train_model
-        train_model(max_samples=training_samples)
-    else:
-        print("\nFine-tuned ModernFinBERT found.")
+    print("  Using base ModernFinBERT (bearish/bullish mapping)")
+    print("  Run `python src/train_sentiment.py` to fine-tune on FOMC data")
 
     create_directory_structure()
     fetch_fx_data(ticker="EURUSD=X", period="2y", interval="1h")

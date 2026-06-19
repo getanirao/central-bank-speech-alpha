@@ -20,16 +20,16 @@ def compute_metrics(eval_pred):
     return {'accuracy': accuracy}
 
 
-def train_model(output_dir='models/modernfinbert_finetuned', num_epochs=1, batch_size=16, max_samples=500):
+def train_model(output_dir='models/modernfinbert_finetuned', num_epochs=3, batch_size=16):
     print("=" * 70)
-    print("  Training ModernFinBERT Classifier Head (base layers frozen)")
+    print("  Training ModernFinBERT on FOMC hawkish/dovish/neutral data")
     print("=" * 70)
 
-    dataset = load_dataset('zeroshot/twitter-financial-news-sentiment')
-    label_names = ['negative', 'positive', 'neutral']
+    dataset = load_dataset('gtfintechlab/fomc_communication')
+    label_names = ['Dovish', 'Hawkish', 'Neutral']
 
-    train_data = dataset['train'].shuffle(seed=42).select(range(min(max_samples, len(dataset['train']))))
-    eval_data = dataset['validation']
+    train_data = dataset['train']
+    eval_data = dataset['test']
     print(f"  Train: {len(train_data)} | Validation: {len(eval_data)}")
 
     model_name = 'tabularisai/ModernFinBERT'
@@ -42,7 +42,6 @@ def train_model(output_dir='models/modernfinbert_finetuned', num_epochs=1, batch
         label2id={l: i for i, l in enumerate(label_names)},
     )
 
-    # Freeze all base layers — train only the randomly initialized classifier head
     for name, param in model.named_parameters():
         if 'classifier' not in name:
             param.requires_grad = False
@@ -52,7 +51,7 @@ def train_model(output_dir='models/modernfinbert_finetuned', num_epochs=1, batch
     print(f"  Trainable params: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)")
 
     def tokenize_fn(batch):
-        return tokenizer(batch['text'], truncation=True, max_length=128)
+        return tokenizer(batch['sentence'], truncation=True, max_length=128)
 
     print("\nTokenizing...")
     tokenized_train = train_data.map(tokenize_fn, batched=True)
