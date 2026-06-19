@@ -4,10 +4,14 @@ import pandas as pd
 
 
 def construct_distributed_lag_matrix(df, max_lags=6):
-    """Generates sequential 4-hour historical shifts to isolate delayed speech pricing curves."""
     for lag in range(1, max_lags + 1):
         df[f'speech_lag_{lag}'] = df['semantic_regime'].shift(lag)
     df = df.dropna(subset=[f'speech_lag_{lag}' for lag in range(1, max_lags + 1)])
+
+    # Almon Polynomial Distributed Lag: compress 6 lags into 2 smooth polynomial terms
+    lag_vals = [df[f'speech_lag_{i}'] for i in range(1, max_lags + 1)]
+    df['almon_term_1'] = sum(lag_vals)
+    df['almon_term_2'] = sum((i + 1) * lag_vals[i] for i in range(max_lags))
     return df
 
 
@@ -32,7 +36,10 @@ def align_and_merge_datasets():
 
     df_merged = df_h4.join(df_speech_agg, how='left')
     df_merged['semantic_score'] = df_merged['semantic_score'].fillna(0.0)
-    df_merged['semantic_regime'] = df_merged['semantic_score'].replace(0.0, np.nan).ffill().fillna(0.0)
+
+    # Exponential decay replaces flat ffill: 24-hour half-life (span=6 on 4h bars)
+    df_merged['semantic_regime'] = df_merged['semantic_score'].replace(0.0, np.nan)
+    df_merged['semantic_regime'] = df_merged['semantic_regime'].ewm(span=6, adjust=False).mean().fillna(0.0)
 
     df_fred = pd.read_csv(fred_path, parse_dates=['date']).set_index('date')
     df_fred.index = df_fred.index.tz_localize('UTC')

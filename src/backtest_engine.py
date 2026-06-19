@@ -4,16 +4,123 @@ import pandas as pd
 import statsmodels.api as sm
 from sklearn.metrics import r2_score
 from sklearn.linear_model import RidgeCV
+from sklearn.ensemble import RandomForestRegressor
 import warnings
 warnings.filterwarnings('ignore')
 
 
+def run_nonlinear_oos_backtest(train_window_pct=0.70, pip_cost=0.00005):
+    """
+    Non-linear Random Forest backtest. Captures complex multi-lag interactions
+    that linear OLS/Ridge models miss after ModernFinBERT upgrade.
+    """
+    input_path = os.path.join('data', 'merged_h4.csv')
+    df = pd.read_csv(input_path, index_col=0, parse_dates=True)
+    split_idx = int(len(df) * train_window_pct)
+
+    lag_cols = [f'speech_lag_{i}' for i in range(1, 7)]
+    features = lag_cols + ['econ_surprise', 'returns_lag1']
+
+    train_df = df.iloc[:split_idx]
+    test_df = df.iloc[split_idx:]
+
+    X_train, y_train = train_df[features], train_df['returns']
+    X_test, y_test = test_df[features], test_df['returns']
+
+    model = RandomForestRegressor(n_estimators=200, max_depth=4, random_state=42)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    print(f"\n{'=' * 70}")
+    print("      NON-LINEAR RANDOM FOREST BACKTEST")
+    print(f"{'=' * 70}")
+    print(f"Training: {len(train_df)} rows | Testing: {len(test_df)} rows")
+
+    importances = model.feature_importances_
+    for feat, imp in zip(features, importances):
+        print(f"  Feature Importance - {feat}: {imp:.4f}")
+
+    test_df = test_df.copy()
+    test_df['predicted_return'] = y_pred
+    test_df['trading_signal'] = np.sign(test_df['predicted_return'])
+    test_df['trade_change'] = test_df['trading_signal'].diff().abs().fillna(0)
+    test_df['strategy_return'] = (test_df['trading_signal'] * test_df['returns']) - (test_df['trade_change'] * pip_cost)
+    test_df['cum_market_returns'] = (1 + test_df['returns']).cumprod() - 1
+    test_df['cum_strategy_returns'] = (1 + test_df['strategy_return']).cumprod() - 1
+
+    oos_r2 = r2_score(y_test, y_pred)
+    hit_rate = (test_df['trading_signal'] == np.sign(test_df['returns'])).mean()
+    info_ratio = (test_df['strategy_return'].mean() / test_df['strategy_return'].std()) * np.sqrt(6)
+    total_strat = test_df['cum_strategy_returns'].iloc[-1]
+    total_mkt = test_df['cum_market_returns'].iloc[-1]
+
+    print(f"\nOOS R2:             {oos_r2:.5f}")
+    print(f"Hit Rate:           {hit_rate:.4%}")
+    print(f"Info Ratio (ann.):  {info_ratio:.4f}")
+    print(f"Total Strategy OOS: {total_strat:.4%}")
+    print(f"Total Market OOS:   {total_mkt:.4%}")
+
+    test_df.to_csv(os.path.join('data', 'backtest_results_rf.csv'))
+    return test_df
+
+
+def run_almon_pdl_backtest(train_window_pct=0.70, pip_cost=0.00005):
+    """
+    Almon Polynomial Distributed Lag backtest. Compresses 6 speech lags
+    into 2 polynomial terms, reducing multicollinearity.
+    """
+    input_path = os.path.join('data', 'merged_h4.csv')
+    df = pd.read_csv(input_path, index_col=0, parse_dates=True)
+
+    if 'almon_term_1' not in df.columns:
+        print("Almon terms not found in merged data. Run main.py first.")
+        return None
+
+    split_idx = int(len(df) * train_window_pct)
+    features = ['almon_term_1', 'almon_term_2', 'econ_surprise', 'returns_lag1']
+
+    train_df = df.iloc[:split_idx]
+    test_df = df.iloc[split_idx:]
+
+    X_train = sm.add_constant(train_df[features])
+    y_train = train_df['returns']
+    model = sm.OLS(y_train, X_train).fit()
+
+    X_test = sm.add_constant(test_df[features], has_constant='add')
+    y_test = test_df['returns']
+    y_pred = model.predict(X_test)
+
+    print(f"\n{'=' * 70}")
+    print("      ALMON POLYNOMIAL DISTRIBUTED LAG BACKTEST")
+    print(f"{'=' * 70}")
+    print(f"Training: {len(train_df)} rows | Testing: {len(test_df)} rows")
+    print(model.summary().tables[1])
+
+    test_df = test_df.copy()
+    test_df['predicted_return'] = y_pred
+    test_df['trading_signal'] = np.sign(test_df['predicted_return'])
+    test_df['trade_change'] = test_df['trading_signal'].diff().abs().fillna(0)
+    test_df['strategy_return'] = (test_df['trading_signal'] * test_df['returns']) - (test_df['trade_change'] * pip_cost)
+    test_df['cum_market_returns'] = (1 + test_df['returns']).cumprod() - 1
+    test_df['cum_strategy_returns'] = (1 + test_df['strategy_return']).cumprod() - 1
+
+    oos_r2 = r2_score(y_test, y_pred)
+    hit_rate = (test_df['trading_signal'] == np.sign(test_df['returns'])).mean()
+    info_ratio = (test_df['strategy_return'].mean() / test_df['strategy_return'].std()) * np.sqrt(6)
+    total_strat = test_df['cum_strategy_returns'].iloc[-1]
+    total_mkt = test_df['cum_market_returns'].iloc[-1]
+
+    print(f"\nOOS R2:             {oos_r2:.5f}")
+    print(f"Hit Rate:           {hit_rate:.4%}")
+    print(f"Info Ratio (ann.):  {info_ratio:.4f}")
+    print(f"Total Strategy OOS: {total_strat:.4%}")
+    print(f"Total Market OOS:   {total_mkt:.4%}")
+
+    test_df.to_csv(os.path.join('data', 'backtest_results_almon.csv'))
+    return test_df
+
+
 def run_rolling_walk_forward(model_type='ridge', train_months=12, eval_months=3, pip_cost=0.00005):
-    """
-    Rolling Walk-Forward Cross-Validation.
-    Trains on `train_months`, evaluates on next `eval_months`,
-    slides forward by `eval_months`. Tracks Lag-4 coefficient stability.
-    """
     input_path = os.path.join('data', 'merged_h4.csv')
     df = pd.read_csv(input_path, index_col=0, parse_dates=True)
 
@@ -55,7 +162,6 @@ def run_rolling_walk_forward(model_type='ridge', train_months=12, eval_months=3,
         X_test = test_df[features].copy()
         y_test = test_df['returns'].copy()
 
-        # Drop any columns that are all NaN in this window
         X_train = X_train.dropna(axis=1, how='all')
         X_test = X_test[X_train.columns]
 
@@ -120,7 +226,6 @@ def run_rolling_walk_forward(model_type='ridge', train_months=12, eval_months=3,
 
 
 def run_static_backtest(model_type='ridge', train_window_pct=0.70, pip_cost=0.00005):
-    """Static 70/30 train/test with transaction cost drag."""
     input_path = os.path.join('data', 'merged_h4.csv')
     df = pd.read_csv(input_path, index_col=0, parse_dates=True)
 
@@ -184,12 +289,11 @@ def run_static_backtest(model_type='ridge', train_window_pct=0.70, pip_cost=0.00
 
 
 def run_comparison_backtest(train_window_pct=0.70, pip_cost=0.00005):
-    """Runs both OLS and Ridge backtests with cost drag + rolling walk-forward."""
     ols_result = run_static_backtest('ols', train_window_pct, pip_cost)
     ridge_result = run_static_backtest('ridge', train_window_pct, pip_cost)
 
     print("\n" + "=" * 60)
-    print("      STATIC BACKTEST COMPARISON: OLS vs RIDGE")
+    print("      LINEAR BACKTEST COMPARISON: OLS vs RIDGE")
     print("=" * 60)
     print(f"{'Metric':<35} {'OLS':>12} {'Ridge':>12}")
     print("-" * 59)
@@ -214,7 +318,34 @@ def run_comparison_backtest(train_window_pct=0.70, pip_cost=0.00005):
     ]:
         print(f"{name:<35} {ols_val:>12.4%} {rid_val:>12.4%}")
 
-    # Rolling walk-forward (6m train / 2m eval — fits ~15mo data span)
+    # Non-linear Random Forest
+    rf_result = run_nonlinear_oos_backtest(train_window_pct, pip_cost)
+
+    # Almon PDL
+    almon_result = run_almon_pdl_backtest(train_window_pct, pip_cost)
+
+    all_results = {
+        'OLS': ols_result,
+        'Ridge': ridge_result,
+        'RandomForest': rf_result,
+        'AlmonPDL': almon_result,
+    }
+
+    print("\n" + "=" * 70)
+    print("      FOUR-MODEL OOS COMPARISON")
+    print("=" * 70)
+    print(f"{'Model':<20} {'OOS R2':>10} {'Hit Rate':>10} {'Info Ratio':>12} {'Total Ret':>10}")
+    print("-" * 64)
+    for name, res in all_results.items():
+        if res is None:
+            continue
+        r2 = r2_score(res['returns'], res['predicted_return'])
+        hr = (np.sign(res['returns']) == res['trading_signal']).mean()
+        ir = (res['strategy_return'].mean() / res['strategy_return'].std()) * np.sqrt(6)
+        tr = res['cum_strategy_returns'].iloc[-1]
+        print(f"{name:<20} {r2:>+10.5f} {hr:>10.4%} {ir:>12.4f} {tr:>+10.4%}")
+
+    # Rolling walk-forward
     print("\n" + "=" * 70)
     print("  Rolling Walk-Forward (6m train / 2m eval)")
     print("=" * 70)
