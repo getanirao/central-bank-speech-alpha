@@ -4,6 +4,7 @@ yfinance>=0.2
 pandas>=2.2
 numpy>=1.26
 statsmodels>=0.14
+linearmodels>=7.0
 datasets>=2.17
 scikit-learn>=1.4
 matplotlib>=3.8
