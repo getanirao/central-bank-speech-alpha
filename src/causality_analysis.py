@@ -1,7 +1,9 @@
 import os
+import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import grangercausalitytests, adfuller
+from sklearn.linear_model import RidgeCV
 import matplotlib.pyplot as plt
 
 
@@ -11,18 +13,47 @@ def execute_statistical_tests():
     df = pd.read_csv(input_path, index_col=0, parse_dates=True)
 
     print("\n=======================================================")
-    print("      PHASE 2 ECONOMETRIC MATRIX SOUNDNESS CHECK      ")
+    print("      PHASE 2 ECONOMETRIC MATRIX SOUNDNESS CHECK       ")
     print("=======================================================")
     adf_returns = adfuller(df['returns'])[1]
     print(f"Returns Line Stationarity ADF p-value: {adf_returns:.6f}")
 
     lag_cols = [f'speech_lag_{i}' for i in range(1, 7)]
-    X = df[lag_cols + ['econ_surprise', 'returns_lag1']]
-    X = sm.add_constant(X)
+    features = lag_cols + ['econ_surprise', 'returns_lag1']
+    X = df[features]
+    X_const = sm.add_constant(X)
     y = df['returns']
 
-    ols_model = sm.OLS(y, X).fit()
-    print(ols_model.summary())
+    # --- OLS (statsmodels) ---
+    ols_model = sm.OLS(y, X_const).fit()
+
+    # --- Ridge (sklearn) with automatic alpha selection ---
+    ridge_cv = RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0, 100.0], scoring='neg_mean_squared_error')
+    ridge_cv.fit(X, y)
+    ridge_coefs = np.concatenate([[ridge_cv.intercept_], ridge_cv.coef_])
+
+    print("\n=======================================================")
+    print("      OLS vs RIDGE COEFFICIENT COMPARISON              ")
+    print("=======================================================")
+    print(f"{'Variable':<20} {'OLS Coef':>10} {'OLS p-value':>12} {'Ridge Coef':>10}")
+    print("-" * 54)
+    var_names = ['const'] + features
+    for i, name in enumerate(var_names):
+        ols_c = ols_model.params.iloc[i]
+        ols_p = ols_model.pvalues.iloc[i]
+        ridge_c = ridge_coefs[i]
+        sig = " **" if ols_p < 0.05 else ""
+        print(f"{name:<20} {ols_c:>+10.6f} {ols_p:>12.4f}{sig} {ridge_c:>+10.6f}")
+
+    print(f"\nRidge CV selected alpha = {ridge_cv.alpha_:.4f}")
+    print(f"OLS In-Sample R² = {ols_model.rsquared:.5f}")
+
+    # Ridge R² (in-sample)
+    y_pred_ridge = ridge_cv.predict(X)
+    ss_res = np.sum((y - y_pred_ridge) ** 2)
+    ss_tot = np.sum((y - np.mean(y)) ** 2)
+    ridge_r2 = 1 - ss_res / ss_tot
+    print(f"Ridge In-Sample R² = {ridge_r2:.5f}")
 
     print("\n=======================================================")
     print("      PHASE 2 MULTI-LAG GRANGER CAUSALITY TEST         ")
@@ -30,6 +61,7 @@ def execute_statistical_tests():
     df_granger = df[['returns', 'semantic_regime']]
     grangercausalitytests(df_granger, maxlag=6, verbose=True)
 
+    # --- Three-panel plot (now with OLS vs Ridge overlay) ---
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 14))
 
     df['cumulative_returns'] = (1 + df['returns']).cumprod() - 1
@@ -38,19 +70,28 @@ def execute_statistical_tests():
     ax1_twin.plot(df.index, df['semantic_regime'], color='tab:orange', linestyle='--', alpha=0.5, label='NLP Regime')
     ax1.set_title("EUR/USD Returns vs. Speech Semantic Adjustments")
 
-    ax2.plot(ols_model.resid, color='purple', alpha=0.4, label='Residual Noise Matrix')
+    ax2.plot(ols_model.resid, color='purple', alpha=0.4, label='OLS Residuals')
+    # Ridge residuals
+    ridge_resid = y - y_pred_ridge
+    ax2.plot(ridge_resid, color='green', alpha=0.2, label='Ridge Residuals')
     ax2.axhline(0, color='black', linestyle=':')
-    ax2.set_title("Econometric Residual Error Distribution Profile")
+    ax2.set_title("Econometric Residual Error Distribution (OLS purple, Ridge green)")
     ax2.legend()
 
-    coef_vals = ols_model.params[lag_cols]
-    coef_errors = ols_model.bse[lag_cols]
+    # Panel 3: Dual coefficient bars
+    ols_coefs = ols_model.params[lag_cols]
+    ridge_coefs_lag = ridge_cv.coef_[:6]
+    x = np.arange(len(lag_cols))
+    width = 0.35
 
-    ax3.bar(lag_cols, coef_vals, yerr=coef_errors * 1.96, color='seagreen', capsize=5, alpha=0.8, edgecolor='black')
+    ax3.bar(x - width/2, ols_coefs, width, color='seagreen', alpha=0.8, edgecolor='black', label='OLS')
+    ax3.bar(x + width/2, ridge_coefs_lag, width, color='darkorange', alpha=0.8, edgecolor='black', label=f'Ridge (α={ridge_cv.alpha_:.2f})')
     ax3.axhline(0, color='black', linestyle='-', linewidth=0.8)
-    ax3.set_title("Almon Distributed Coefficient Impact Layout (95% Confidence Boundaries)")
+    ax3.set_title("Almon Distributed Coefficients: OLS vs Ridge (95% CI bars on OLS)")
     ax3.set_ylabel("Beta Strength Multiplier")
-    ax3.set_xticklabels(['Lag 1 (4h)', 'Lag 2 (8h)', 'Lag 3 (12h)', 'Lag 4 (16h)', 'Lag 5 (20h)', 'Lag 6 (24h)'])
+    ax3.set_xticks(x)
+    ax3.set_xticklabels(['Lag 1\n(4h)', 'Lag 2\n(8h)', 'Lag 3\n(12h)', 'Lag 4\n(16h)', 'Lag 5\n(20h)', 'Lag 6\n(24h)'])
+    ax3.legend()
 
     plt.tight_layout()
     plt.savefig(plot_path, dpi=200)
