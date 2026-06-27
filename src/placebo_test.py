@@ -21,11 +21,14 @@ enforce_strict_reproducibility()
 
 
 def run_placebo_test(n_iterations=1000, model_type='ridge'):
-    input_path = os.path.join('data', 'merged_h4.csv')
+    input_path = os.path.join('data', 'merged_daily.csv')
     orig = pd.read_csv(input_path, index_col=0, parse_dates=True)
 
-    lag_cols = [f'speech_lag_{i}' for i in range(1, 7)]
-    features = lag_cols + ['econ_surprise', 'returns_lag1']
+    lag_cols = [f'{p}_lag_{i}' for p in ['fed', 'ecb'] for i in range(1, 7)]
+    almon_cols = [f'{p}_almon_{j}' for p in ['fed', 'ecb'] for j in [1, 2]]
+    interact_cols = [f'{p}_macro_interact' for p in ['fed', 'ecb']]
+    speech_cols = lag_cols + almon_cols + interact_cols
+    features = speech_cols + ['hv_20', 'econ_surprise', 'returns_lag1']
     split_idx = int(len(orig) * 0.70)
 
     X = orig[features]
@@ -47,11 +50,19 @@ def run_placebo_test(n_iterations=1000, model_type='ridge'):
 
     for i in range(n_iterations):
         df_perm = orig.copy()
-        df_perm['semantic_regime'] = np.random.permutation(df_perm['semantic_regime'].values)
+        # Shuffle both country scores independently
+        df_perm['fed_score'] = np.random.permutation(df_perm['fed_score'].values)
+        df_perm['ecb_score'] = np.random.permutation(df_perm['ecb_score'].values)
 
         for lag in range(1, 7):
-            df_perm[f'speech_lag_{lag}'] = df_perm['semantic_regime'].shift(lag)
-        df_perm = df_perm.dropna(subset=lag_cols)
+            df_perm[f'fed_lag_{lag}'] = df_perm['fed_score'].shift(lag)
+            df_perm[f'ecb_lag_{lag}'] = df_perm['ecb_score'].shift(lag)
+        for p in ['fed', 'ecb']:
+            vals = [df_perm[f'{p}_lag_{i}'] for i in range(1, 7)]
+            df_perm[f'{p}_almon_1'] = sum(vals)
+            df_perm[f'{p}_almon_2'] = sum((i + 1) * vals[i - 1] for i in range(6))
+            df_perm[f'{p}_macro_interact'] = df_perm[f'{p}_score'] * df_perm['econ_surprise']
+        df_perm = df_perm.dropna(subset=speech_cols)
 
         X_perm = df_perm[features]
         y_perm = df_perm['returns']

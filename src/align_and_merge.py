@@ -16,24 +16,14 @@ def enforce_strict_reproducibility(seed=42):
 enforce_strict_reproducibility()
 
 
-def construct_distributed_lag_matrix(df, max_lags=6):
-    df = df.copy()
+def build_country_lags(df, prefix, max_lags=6):
+    """Create lags + Almon PDL terms for a country-specific score column."""
     for lag in range(1, max_lags + 1):
-        df[f'speech_lag_{lag}'] = df['semantic_regime'].shift(lag)
-        df[f'strict_lag_{lag}'] = df['strict_regime'].shift(lag)
-
-    df['returns_lag1'] = df['returns'].shift(1)
-
-    all_lags = [f'speech_lag_{lag}' for lag in range(1, max_lags + 1)]
-    all_lags += [f'strict_lag_{lag}' for lag in range(1, max_lags + 1)]
-    df = df.dropna(subset=all_lags + ['returns', 'returns_lag1'])
-
-    broad_vals = [df[f'speech_lag_{i}'] for i in range(1, max_lags + 1)]
-    strict_vals = [df[f'strict_lag_{i}'] for i in range(1, max_lags + 1)]
-    df['almon_term_1'] = sum(broad_vals)
-    df['almon_term_2'] = sum((i + 1) * broad_vals[i - 1] for i in range(max_lags))
-    df['strict_almon_1'] = sum(strict_vals)
-    df['strict_almon_2'] = sum((i + 1) * strict_vals[i - 1] for i in range(max_lags))
+        df[f'{prefix}_lag_{lag}'] = df[f'{prefix}_score'].shift(lag)
+    vals = [df[f'{prefix}_lag_{i}'] for i in range(1, max_lags + 1)]
+    df[f'{prefix}_almon_1'] = sum(vals)
+    df[f'{prefix}_almon_2'] = sum((i + 1) * vals[i - 1] for i in range(max_lags))
+    df[f'{prefix}_macro_interact'] = df[f'{prefix}_score'] * df['econ_surprise']
     return df
 
 
@@ -41,50 +31,59 @@ def align_and_merge_datasets():
     price_path = os.path.join('data', 'fx_prices.csv')
     speech_path = os.path.join('data', 'speeches_scored.csv')
     fred_path = os.path.join('data', 'fred_shocks.csv')
-    output_path = os.path.join('data', 'merged_h4.csv')
+    output_path = os.path.join('data', 'merged_daily.csv')
 
+    # Daily price data (already daily from yfinance)
     df_prices = pd.read_csv(price_path)
     time_col = 'Datetime' if 'Datetime' in df_prices.columns else 'Date'
     df_prices[time_col] = pd.to_datetime(df_prices[time_col], errors='coerce', utc=True).dt.tz_localize(None)
     df_prices = df_prices.dropna(subset=[time_col]).set_index(time_col)
 
-    ohlc_dict = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
-    df_h4 = df_prices.resample('4h').agg(ohlc_dict).dropna(subset=['Close'])
-    df_h4['returns'] = np.log(df_h4['Close'] / df_h4['Close'].shift(1))
+    # For daily source data, just use as-is; no resampling needed
+    df_daily = df_prices.copy()
+    df_daily['returns'] = np.log(df_daily['Close'] / df_daily['Close'].shift(1))
+    df_daily['hv_20'] = df_daily['returns'].rolling(20).std()
 
-    # Phase 3: Feature Engineering — volatility regime
-    df_h4['hv_20'] = df_h4['returns'].rolling(20).std()
-
+    # Load scored speeches and split by country (non-filled)
     df_speeches = pd.read_csv(speech_path, parse_dates=['date'])
     df_speeches['date'] = pd.to_datetime(df_speeches['date'], errors='coerce', utc=True).dt.tz_localize(None)
-    df_speech_agg = df_speeches.groupby('date')[['semantic_score', 'strict_score']].mean()
 
-    df_merged = df_h4.join(df_speech_agg, how='left')
-    df_merged['semantic_score'] = df_merged['semantic_score'].fillna(0.0)
-    df_merged['strict_score'] = df_merged['strict_score'].fillna(0.0)
+    fed = df_speeches[df_speeches['country'] == 'United States'].copy()
+    ecb = df_speeches[df_speeches['country'] == 'Euro area'].copy()
 
-    df_merged['semantic_regime'] = df_merged['semantic_score'].replace(0.0, np.nan)
-    df_merged['semantic_regime'] = df_merged['semantic_regime'].ewm(span=6, adjust=False).mean().fillna(0.0)
+    # Use strict_score (requires >=3 policy keywords per speech)
+    fed['score'] = fed['strict_score']
+    ecb['score'] = ecb['strict_score']
 
-    df_merged['strict_regime'] = df_merged['strict_score'].replace(0.0, np.nan)
-    df_merged['strict_regime'] = df_merged['strict_regime'].ewm(span=6, adjust=False).mean().fillna(0.0)
+    fed_agg = fed.groupby('date')['score'].mean().rename('fed_score')
+    ecb_agg = ecb.groupby('date')['score'].mean().rename('ecb_score')
 
+    # Non-filled join — zeros on days without speeches
+    df_merged = df_daily.join(fed_agg, how='left')
+    df_merged = df_merged.join(ecb_agg, how='left')
+    df_merged['fed_score'] = df_merged['fed_score'].fillna(0.0)
+    df_merged['ecb_score'] = df_merged['ecb_score'].fillna(0.0)
+
+    # FRED macro shocks
     df_fred = pd.read_csv(fred_path, parse_dates=['date'])
     df_fred['date'] = pd.to_datetime(df_fred['date'], utc=True).dt.tz_localize(None)
     df_fred = df_fred.set_index('date')
     df_merged = df_merged.join(df_fred[['econ_surprise']], how='left')
     df_merged['econ_surprise'] = df_merged['econ_surprise'].ffill().fillna(0.0)
 
-    df_merged = construct_distributed_lag_matrix(df_merged, max_lags=6)
+    # Build country-specific lags + Almon PDLs
+    df_merged = build_country_lags(df_merged, 'fed', max_lags=6)
+    df_merged = build_country_lags(df_merged, 'ecb', max_lags=6)
 
-    # Phase 3: Speech-macro interaction and sentiment momentum
-    df_merged['speech_macro_interact'] = df_merged['semantic_regime'] * df_merged['econ_surprise']
-    df_merged['sentiment_momentum'] = df_merged['semantic_regime'] - df_merged['semantic_regime'].shift(6)
+    df_merged['returns_lag1'] = df_merged['returns'].shift(1)
 
-    df_merged = df_merged.dropna(subset=['returns', 'hv_20', 'speech_macro_interact', 'sentiment_momentum'])
+    # Drop rows missing any required feature
+    lag_cols = [f'{p}_lag_{i}' for p in ['fed', 'ecb'] for i in range(1, 7)]
+    required = lag_cols + ['returns', 'returns_lag1', 'hv_20']
+    df_merged = df_merged.dropna(subset=required)
 
     df_merged.to_csv(output_path)
-    print(f"Phase 2 multi-lag baseline compiled to {output_path} ({len(df_merged)} entries).")
+    print(f"Daily merged dataset saved to {output_path} ({len(df_merged)} entries).")
     return df_merged
 
 

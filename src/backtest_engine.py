@@ -25,7 +25,7 @@ enforce_strict_reproducibility()
 
 
 def _load_data():
-    input_path = os.path.join('data', 'merged_h4.csv')
+    input_path = os.path.join('data', 'merged_daily.csv')
     df = pd.read_csv(input_path, index_col=0, parse_dates=True)
     return df
 
@@ -50,22 +50,23 @@ def _apply_trading_costs(test_df, pip_cost=0.00005):
 
 
 def get_features():
-    broad = [f'speech_lag_{i}' for i in range(1, 7)]
-    strict = [f'strict_lag_{i}' for i in range(1, 7)]
-    engineered = ['hv_20', 'speech_macro_interact', 'sentiment_momentum']
-    return broad + strict + engineered + ['econ_surprise', 'returns_lag1']
+    lags = [f'{p}_lag_{i}' for p in ['fed', 'ecb'] for i in range(1, 7)]
+    almons = [f'{p}_almon_{j}' for p in ['fed', 'ecb'] for j in [1, 2]]
+    interact = [f'{p}_macro_interact' for p in ['fed', 'ecb']]
+    engineered = ['hv_20'] + interact
+    return lags + almons + engineered + ['econ_surprise', 'returns_lag1']
 
 
 def _get_purged_split(df, n_splits=5, embargo_bars=1):
-    """Build PurgedKFold indices for H4 return prediction."""
+    """Build PurgedKFold indices for daily return prediction."""
     prediction_times = pd.Series(df.index, index=df.index)
-    evaluation_times = prediction_times + pd.Timedelta(hours=4)
+    evaluation_times = prediction_times + pd.Timedelta(days=1)
     pkf = PurgedKFold(
         n_splits=n_splits,
         prediction_times=prediction_times,
         evaluation_times=evaluation_times,
-        purge_horizon='4h',
-        embargo=f'{embargo_bars * 4}h',
+        purge_horizon='1D',
+        embargo=f'{embargo_bars}D',
     )
     return pkf
 
@@ -82,7 +83,7 @@ def run_purged_cv_backtest(model_type='ridge', n_splits=5, pip_cost=0.00005):
     fold_metrics = []
 
     print(f"\n{'=' * 70}")
-    print(f"  PURGED CV BACKTEST ({model_type.upper()}) - {n_splits} folds, embargo=4h")
+    print(f"  PURGED CV BACKTEST ({model_type.upper()}) - {n_splits} folds, embargo=1D")
     print(f"{'=' * 70}")
 
     for fold_idx, (train_idx, test_idx) in enumerate(pkf.split(df)):
@@ -382,12 +383,13 @@ def run_xgboost_backtest(train_window_pct=0.70, pip_cost=0.00005):
 
 def run_almon_pdl_backtest(train_window_pct=0.70, pip_cost=0.00005):
     df = _load_data()
-    if 'almon_term_1' not in df.columns:
+    required = [f'{p}_almon_{j}' for p in ['fed', 'ecb'] for j in [1, 2]]
+    if not all(c in df.columns for c in required):
         print("Almon terms not found.")
         return None
 
     split_idx = int(len(df) * train_window_pct)
-    features = ['almon_term_1', 'almon_term_2', 'econ_surprise', 'returns_lag1']
+    features = required + ['econ_surprise', 'returns_lag1']
 
     train_df = df.iloc[:split_idx]
     test_df = df.iloc[split_idx:]
@@ -474,7 +476,7 @@ def run_rolling_walk_forward(model_type='ridge', train_months=6, eval_months=2, 
                 y_pred = model.predict(X_test_c)
                 coefs_dict = dict(zip(X_train.columns, model.params[1:]))
 
-            lag4_coef = coefs_dict.get('speech_lag_4', 0.0)
+            lag4_coef = coefs_dict.get('fed_lag_4', 0.0)
         except Exception as e:
             print(f"  Window {i + 1}: SKIPPED ({e})")
             continue

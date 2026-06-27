@@ -19,7 +19,7 @@ enforce_strict_reproducibility()
 
 
 def generate_correlation_dashboard():
-    input_path = os.path.join('data', 'merged_h4.csv')
+    input_path = os.path.join('data', 'merged_daily.csv')
     output_dir = 'notebooks'
     output_path = os.path.join(output_dir, 'correlation_shapes.png')
 
@@ -30,7 +30,7 @@ def generate_correlation_dashboard():
 
     df = pd.read_csv(input_path, index_col=0, parse_dates=True)
 
-    lag_cols = [f'speech_lag_{i}' for i in range(1, 7)]
+    lag_cols = [f'{p}_lag_{i}' for p in ['fed', 'ecb'] for i in range(1, 7)]
     core_features = ['returns', 'econ_surprise', 'returns_lag1'] + lag_cols
     corr_matrix = df[core_features].corr()
 
@@ -42,18 +42,20 @@ def generate_correlation_dashboard():
                 square=True, linewidths=.5,
                 cbar_kws={"shrink": .8, "label": "Pearson r"}, ax=ax1)
     ax1.set_title("Feature Correlation Matrix", fontsize=14, fontweight='bold', pad=15)
-    label_mappings = ['Returns', 'FRED Shock', 'Returns (L1)'] + [f'Speech Lag {i} ({i*4}h)' for i in range(1, 7)]
-    ax1.set_xticklabels(label_mappings, rotation=45, ha='right')
-    ax1.set_yticklabels(label_mappings, rotation=0)
+    lbls = ['Returns', 'FRED Shock', 'Returns(L1)']
+    lbls += [f'F{i}' for i in range(1, 7)] + [f'E{i}' for i in range(1, 7)]
+    ax1.set_xticklabels(lbls, rotation=45, ha='right')
+    ax1.set_yticklabels(lbls, rotation=0)
 
-    lag_correlations = [corr_matrix.loc['returns', col] for col in lag_cols]
-    lag_labels = [f'{i*4}h' for i in range(1, 7)]
-    ax2.plot(lag_labels, lag_correlations, marker='o', linewidth=2.5, color='tab:blue', label='Correlation Shape')
+    # Two digestion curves: Fed and ECB
+    fed_corr = [corr_matrix.loc['returns', f'fed_lag_{i}'] for i in range(1, 7)]
+    ecb_corr = [corr_matrix.loc['returns', f'ecb_lag_{i}'] for i in range(1, 7)]
+    lag_labels = [f'{i}D' for i in range(1, 7)]
+
+    ax2.plot(lag_labels, fed_corr, marker='o', linewidth=2.5, color='tab:orange', label='Fed')
+    ax2.plot(lag_labels, ecb_corr, marker='s', linewidth=2.5, color='tab:green', label='ECB')
     ax2.axhline(0, color='black', linestyle=':', alpha=0.6)
-    peak_idx = np.argmax(np.abs(lag_correlations))
-    ax2.scatter(lag_labels[peak_idx], lag_correlations[peak_idx], color='tab:red', s=150, zorder=5,
-                label=f'Peak at {lag_labels[peak_idx]}')
-    ax2.set_title("Signal Digestion Curve", fontsize=14, fontweight='bold', pad=15)
+    ax2.set_title("Signal Digestion Curve by Country", fontsize=14, fontweight='bold', pad=15)
     ax2.set_xlabel("Time Since Speech", fontsize=11, labelpad=10)
     ax2.set_ylabel("Correlation with Returns", fontsize=11, labelpad=10)
     ax2.grid(True, linestyle='--', alpha=0.3)

@@ -32,17 +32,17 @@ def run_pipeline():
     print("     FX QUANT LANGUAGE MODEL PIPELINE")
     print("=" * 70)
 
-    print("  Using base ModernFinBERT (bearish/bullish mapping)")
-    print("  Run `python src/train_sentiment.py` to fine-tune on FOMC data")
+    print("  CentralBankRoBERTa dual classifier | country-split sentiment | 10y daily data")
+    print("  Fed + ECB scores with separate lag structures (non-filled)")
 
     create_directory_structure()
-    fetch_fx_data(ticker="EURUSD=X", period="2y", interval="1h")
+    fetch_fx_data(ticker="EURUSD=X", period="10y", interval="1d")
     fetch_speech_corpus()
 
     print("\n--- Phase 1: FRED Macro ---")
     fetch_and_save_fred_shocks()
 
-    print("\n--- Phase 2: ModernFinBERT Sentiment ---")
+    print("\n--- Phase 2: CentralBankRoBERTa Sentiment ---")
     run_sentiment_analysis(batch_size=16)
 
     print("\n--- Phase 3: Merge & Align ---")

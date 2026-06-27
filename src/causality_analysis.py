@@ -24,7 +24,7 @@ enforce_strict_reproducibility()
 
 
 def execute_statistical_tests():
-    input_path = os.path.join('data', 'merged_h4.csv')
+    input_path = os.path.join('data', 'merged_daily.csv')
     plot_path = os.path.join('notebooks', 'shape_analysis.png')
     df = pd.read_csv(input_path, index_col=0, parse_dates=True)
 
@@ -34,7 +34,7 @@ def execute_statistical_tests():
     adf_returns = adfuller(df['returns'])[1]
     print(f"Returns Stationarity (ADF p-value): {adf_returns:.6f}")
 
-    lag_cols = [f'speech_lag_{i}' for i in range(1, 7)] + [f'strict_lag_{i}' for i in range(1, 7)]
+    lag_cols = [f'{p}_lag_{i}' for p in ['fed', 'ecb'] for i in range(1, 7)]
     features = lag_cols + ['econ_surprise', 'returns_lag1']
     X = df[features]
     X_const = sm.add_constant(X)
@@ -94,8 +94,9 @@ def execute_statistical_tests():
     print("\n" + "=" * 70)
     print("      ALMON POLYNOMIAL DISTRIBUTED LAG (PDL)")
     print("=" * 70)
-    if 'almon_term_1' in df.columns and 'almon_term_2' in df.columns:
-        almon_features = ['almon_term_1', 'almon_term_2', 'econ_surprise', 'returns_lag1']
+    required_almon = [f'{p}_almon_{j}' for p in ['fed', 'ecb'] for j in [1, 2]]
+    if all(c in df.columns for c in required_almon):
+        almon_features = required_almon + ['econ_surprise', 'returns_lag1']
         X_almon = sm.add_constant(df[almon_features].dropna())
         y_almon = df.loc[X_almon.index, 'returns']
         almon_model = sm.OLS(y_almon, X_almon).fit()
@@ -106,10 +107,16 @@ def execute_statistical_tests():
 
     # --- Granger ---
     print("\n" + "=" * 70)
-    print("      MULTI-LAG GRANGER CAUSALITY TEST")
+    print("      MULTI-LAG GRANGER CAUSALITY TEST (Fed score)")
     print("=" * 70)
-    df_granger = df[['returns', 'semantic_regime']]
-    grangercausalitytests(df_granger, maxlag=6, verbose=True)
+    df_granger_fed = df[['returns', 'fed_score']].dropna()
+    grangercausalitytests(df_granger_fed, maxlag=6, verbose=True)
+
+    print("\n" + "=" * 70)
+    print("      MULTI-LAG GRANGER CAUSALITY TEST (ECB score)")
+    print("=" * 70)
+    df_granger_ecb = df[['returns', 'ecb_score']].dropna()
+    grangercausalitytests(df_granger_ecb, maxlag=6, verbose=True)
 
     # --- Four-panel plot ---
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 12))
@@ -117,8 +124,9 @@ def execute_statistical_tests():
     df['cumulative_returns'] = (1 + df['returns']).cumprod() - 1
     ax1.plot(df.index, df['cumulative_returns'], color='tab:blue', alpha=0.7, label='Returns Profile')
     ax1_twin = ax1.twinx()
-    ax1_twin.plot(df.index, df['semantic_regime'], color='tab:orange', linestyle='--', alpha=0.5, label='NLP Decay')
-    ax1.set_title("EUR/USD Returns vs. Speech Semantic Decay")
+    ax1_twin.plot(df.index, df['fed_score'], color='tab:orange', linestyle='--', alpha=0.5, label='Fed Score')
+    ax1_twin.plot(df.index, df['ecb_score'], color='tab:green', linestyle=':', alpha=0.5, label='ECB Score')
+    ax1.set_title("EUR/USD Returns vs. Country Speech Scores")
 
     ax2.plot(ols_model.resid, color='purple', alpha=0.4, label='OLS Residuals')
     ridge_resid = y - y_pred_ridge
@@ -138,17 +146,16 @@ def execute_statistical_tests():
     ax3.set_title("Distributed Lags: OLS vs Ridge")
     ax3.set_ylabel("Beta Strength")
     ax3.set_xticks(x)
-    ax3.set_xticklabels(['L1', 'L2', 'L3', 'L4', 'L5', 'L6',
-                         'S1', 'S2', 'S3', 'S4', 'S5', 'S6'])
+    lbls = [f'F{i}' for i in range(1, 7)] + [f'E{i}' for i in range(1, 7)]
+    ax3.set_xticklabels(lbls, rotation=45)
     ax3.legend()
 
     xgb_imps = xgb_importances[:12]
     ax4.bar(x, xgb_imps, width=0.5, color='crimson', alpha=0.7, edgecolor='black')
-    ax4.set_title("XGBoost Feature Importances (Broad + Strict Lags)")
+    ax4.set_title("XGBoost Feature Importances (F=Feed, E=ECB)")
     ax4.set_ylabel("Importance")
     ax4.set_xticks(x)
-    ax4.set_xticklabels(['L1', 'L2', 'L3', 'L4', 'L5', 'L6',
-                         'S1', 'S2', 'S3', 'S4', 'S5', 'S6'])
+    ax4.set_xticklabels(lbls, rotation=45)
 
     plt.tight_layout()
     plt.savefig(plot_path, dpi=200)

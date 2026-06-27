@@ -25,7 +25,7 @@ def create_directory_structure():
             os.makedirs(d)
 
 
-def fetch_fx_data(ticker="EURUSD=X", period="2y", interval="1h"):
+def fetch_fx_data(ticker="EURUSD=X", period="10y", interval="1d"):
     print(f"Downloading market price action for {ticker}...")
     fx_data = yf.download(tickers=ticker, period=period, interval=interval)
     if isinstance(fx_data.columns, pd.MultiIndex):
